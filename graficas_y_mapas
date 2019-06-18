@@ -1,0 +1,177 @@
+##### Modelo de corrupción a través de la desigualdad #####
+
+### Cargar librerías (Paquetes requeridos)
+library(tidyverse)
+library(magrittr)
+library(leaflet)
+library(sf)
+library(foreign)
+library(readr)
+library(readxl)
+library(stargazer)
+library(lfe)
+
+### Establecer directorio
+setwd("Desktop/caso/datos/")
+
+
+### Cargar bases de datos y formar una sola
+cont<- read_excel("excel/continentes .xlsx") # Esta base es solo para saber a qué continente pertenece cada país
+
+# Cargar variables (al final no utilcé todas por falta de observaciones)
+corruption <- read_excel("excel/corruption index.xlsx")
+corruption %<>% select("X__1", "2009.0")
+names(corruption) <- c("paises","corruption")
+
+gini <- read_excel("excel/gini.xls", skip = 2)
+gini %<>% select("Country Name","2009")
+names(gini) <- c("paises","gini")
+
+dataq <- read_excel("excel/data quality income.xlsx")
+dataq %<>% select("X__1","2009.0")
+names(dataq) <- c("paises","qualtydata")
+
+edu <- read_excel("excel/education expenditure.xlsx")
+edu %<>% select("Expenditure per student, primary (% of GDP per capita)","2009")
+names(edu) <- c("paises","education")
+
+growth <- read_excel("excel/growth.xlsx")
+growth %<>% select("GDP per capita growth (annual %)","2009")
+names(growth) <- c("paises","crecimiento")
+
+pov <- read_excel("excel/headcount ratio.xlsx")
+pov %<>% select("Poverty headcount ratio at $1.25 a day (PPP) (% of population)","2009.0")
+names(pov) <- c("paises","headcount")
+
+health <- read_excel("excel/health expenditure.xlsx")
+health %<>% select("Total expenditure on health as percentage of GDP (gross domestic product)","2009.0")
+names(health) <- c("paises","health")
+
+incometen <- read_excel("excel/income 10% poorest.xlsx")
+incometen %<>% select("Income share held by lowest 10%" ,"2007.0")
+names(incometen) <- c("paises","10")
+
+incomev <- read_excel("excel/income 20% poorest.xlsx")
+incomev %<>% select("Income share held by lowest 20%" ,"2007.0")
+names(incomev) <- c("paises","20")
+
+investment <- read_excel("excel/Investment.xlsx")
+investment %<>% select("Gross capital formation (% of GDP)" ,"2009")
+names(investment) <- c("paises","invest")
+
+life <- read_excel("excel/life expectancy.xlsx")
+life %<>% select("Life expectancy with projections" ,"2009.0")
+names(life) <- c("paises","expectancy")
+
+development <- read_excel("excel/Indicator_HDI.xlsx")
+development %<>% select("HDI", "2009.0")
+names(development)<-c("paises","hdi")
+
+#Pegar bases de datos para hacer una sola
+corruption <- left_join(corruption, cont, by="paises")
+corruption <- left_join(corruption, growth, by="paises")
+corruption <- left_join(corruption, gini, by="paises")
+corruption <- left_join(corruption, investment, by="paises")
+corruption <- left_join(corruption, health, by="paises")
+corruption <- left_join(corruption, edu, by="paises")
+corruption <- left_join(corruption, life, by="paises")
+corruption <- left_join(corruption, pov, by="paises")
+corruption <- left_join(corruption, dataq, by="paises")
+corruption <- left_join(corruption, incometen, by="paises")
+corruption <- left_join(corruption, incomev, by="paises")
+corruption <- left_join(corruption, development, by="paises")
+
+#write.table (corruption, "Desktop/caso/data/output/base")
+
+rm(dataq,edu,gini,growth,health, incometen,incomev,investment,life,pov, development)
+
+
+
+### Análisis
+
+# Modelo de regresión lineal con datos actuales (2009)
+modelo <- lm(crecimiento~ corruption +hdi+ gini +invest+health  ,    data = corruption)
+modeloer <-felm(crecimiento~ corruption +hdi+ gini +invest+health  ,    data = corruption)
+
+lm(corruption ~ gini + crecimiento +invest+health,   data = corruption)
+lm(crecimiento~ corruption , data = corruption)
+plot(modelo)
+
+#Escribir tablas de regresión 
+stargazer(modelo, type = "html", out="output/modelo")
+stargazer(modeloer, type = "html", out = "output/modeloer")
+
+# Gráficas
+corruption %>% ggplot() + geom_point(aes(x=crecimiento, y = corruption,  color=as.factor(continente)), size = 5) +
+  scale_color_manual(values=c("aquamarine2","darkolivegreen2", "greenyellow", "lightgreen", "forestgreen","avender"))+theme_minimal()
+
+corruption %>% ggplot() + geom_point(aes(x=invest, y = crecimiento,  color=as.factor(continente)), size = 6) +
+  scale_color_manual(values=c("yellow1","orange", "darkorange2", "orangered", "red4","blue"))+theme_minimal()
+
+corruption %>% ggplot() + geom_point(aes(x=hdi, y = crecimiento,  color=as.factor(continente)), size = ) +
+  scale_color_manual(values=c("#7fcdbb","#1d91c0", "#081d58", "cyan4", "lightblue1","avender"))+theme_minimal()
+
+corruption %>% ggplot() + geom_point(aes(x=hdi, y = corruption,  color=as.factor(continente)), size = 5) +
+  scale_color_manual(values=c("#7fcdbb","#1d91c0", "#081d58", "cyan4", "lightblue1","avender"))+theme_minimal()
+
+
+corruption %>% ggplot() + geom_point(aes(x=gini, y = corruption,  color=as.factor(continente)), size = 7) +
+  scale_color_manual(values=c("#7fcdbb","#1d91c0", "#081d58", "cyan4", "lightblue1","avender"))+theme_minimal()
+
+corruption %>% ggplot() + geom_point(aes(x=headcount, y = corruption,  color=as.factor(continente)), size = 7) +
+  scale_color_manual(values=c("#7fcdbb","#1d91c0", "#081d58", "cyan4", "lightblue1","avender"))+theme_minimal()
+
+
+
+### Mapas
+
+#Cargar mapa vacío
+mapa <- st_read("output/Paises/10m_admin_0_countries.shp")
+
+#Pegar base de datos con el mapa
+m <- left_join(mapa, corruption, by=c("NAME"="paises"))
+
+#convertir el mapa+base en un leafleat para colorear
+mapa <-leaflet(m)
+mapa%>% addPolygons()
+
+#paleta de colores (corupción)
+bins <- c(10,9,8,7,6,5,4,3,2,1,.5,0) #Utilizo este vector porque CPI va del 0 al 10
+pal <- colorBin("YlOrRd", domain = corruption$corruption, bins = bins)
+
+# etiquetas (corupción)
+labels<-paste0(corruption$paises,":",corruption$corruption)
+
+#mapa de corrupción coloreado por la intensidad de la variable en cada país
+mapa %>% addPolygons(fillColor = ~pal(corruption), weight = 2,opacity = 1, color = "white", dashArray = "3", 
+                     fillOpacity = .7, highlight = highlightOptions(
+                       weight = 5,
+                       color = "#666",
+                       dashArray = "",
+                       fillOpacity = 0.7,
+                       bringToFront = TRUE) ) %>% 
+  addTiles() %>%
+  addProviderTiles("CartoDB.Positron")
+
+
+#paleta de colores(HDI)
+bins <- c(0,.1,.2, .3,.4, .5,.6,.7,.8,.9,1) # utilizo este vector porque el hdi va del 0 al 1
+pal <- colorBin("YlOrRd", domain = corruption$hdi, bins = bins)
+
+# etiquetas (HDI)
+labels<-paste0(corruption$paises,":",corruption$hdi)
+
+#mapa de hdi coloreado por la intensidad de la variable en cada país
+mapa %>% addPolygons(fillColor = ~pal(hdi), weight = 2,opacity = 1, color = "white", dashArray = "3", 
+                     fillOpacity = .7, highlight = highlightOptions(
+                       weight = 5,
+                       color = "#666",
+                       dashArray = "",
+                       fillOpacity = 0.7,
+                       bringToFront = TRUE),  label = labels,
+                     labelOptions = labelOptions(
+                       style = list("font-weight" = "normal", padding = "3px 8px"),
+                       textsize = "15px",
+                       direction = "auto"))  %>% addLegend(pal = pal,values = ~hdi) %>% 
+  addTiles() %>%
+  addProviderTiles("CartoDB.Positron") 
